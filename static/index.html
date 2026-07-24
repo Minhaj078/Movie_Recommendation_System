@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CineMatch AI - TMDB Movie Recommendation System</title>
+  <meta name="description" content="A content-based movie recommendation system powered by NLP, Scikit-Learn, and TMDB metadata. Find similar movies instantly.">
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-background">
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+  </div>
+
+  <!-- Navigation Bar -->
+  <header class="navbar">
+    <div class="container nav-container">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="4"></rect>
+            <path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"></path>
+          </svg>
+        </div>
+        <span class="brand-name">CineMatch<span class="gradient-text">AI</span></span>
+      </div>
+
+      <div class="nav-stats" id="nav-stats">
+        <span class="stat-badge"><span class="pulse-dot"></span> 4,806 Movies</span>
+        <span class="stat-badge">Cosine Similarity ML</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="container main-content">
+    <!-- Hero Section -->
+    <section class="hero-section">
+      <div class="hero-header">
+        <h1 class="hero-title">Find Your Next Favorite Movie with <span class="gradient-text">AI Recommendation</span></h1>
+        <p class="hero-subtitle">Enter any movie you love to generate instant content-based recommendations powered by plot summaries, genres, keywords, cast, and directors.</p>
+      </div>
+
+      <!-- Search Box & Autocomplete -->
+      <div class="search-wrapper">
+        <div class="search-box">
+          <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="search-input" placeholder="Type a movie title (e.g., Avatar, Iron Man, Interstellar...)" autocomplete="off">
+          <button id="clear-btn" class="clear-btn hidden" aria-label="Clear search">&times;</button>
+          
+          <!-- Custom Dark Styled Dropdown -->
+          <div class="custom-dropdown-container">
+            <label class="dropdown-label">Count:</label>
+            <div class="custom-dropdown" id="custom-top-dropdown">
+              <button type="button" class="dropdown-trigger" id="dropdown-trigger">
+                <span id="selected-top-n">Top 5</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              <div class="dropdown-menu hidden" id="dropdown-menu">
+                <div class="dropdown-item active" data-value="5">Top 5</div>
+                <div class="dropdown-item" data-value="8">Top 8</div>
+                <div class="dropdown-item" data-value="12">Top 12</div>
+                <div class="dropdown-item" data-value="16">Top 16</div>
+              </div>
+            </div>
+          </div>
+
+          <button id="search-btn" class="btn btn-primary">
+            <span>Recommend</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Autocomplete Dropdown -->
+        <div id="autocomplete-list" class="autocomplete-dropdown hidden"></div>
+      </div>
+
+      <!-- Quick Pick Badges -->
+      <div class="quick-picks">
+        <span class="quick-pick-label">Trending Searches:</span>
+        <div class="quick-pick-tags">
+          <button class="tag-btn" data-movie="Avatar">Avatar</button>
+          <button class="tag-btn" data-movie="Iron Man">Iron Man</button>
+          <button class="tag-btn" data-movie="Interstellar">Interstellar</button>
+          <button class="tag-btn" data-movie="The Dark Knight">The Dark Knight</button>
+          <button class="tag-btn" data-movie="Inception">Inception</button>
+          <button class="tag-btn" data-movie="The Avengers">The Avengers</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Error Alert Box -->
+    <div id="error-container" class="error-card hidden">
+      <div class="error-icon">⚠️</div>
+      <div class="error-content">
+        <h3 id="error-title">Movie Not Found</h3>
+        <p id="error-message">We couldn't find exact match in our database. Try one of the suggested titles below.</p>
+        <div id="error-suggestions" class="error-suggestions-tags"></div>
+      </div>
+    </div>
+
+    <!-- Loading Skeleton State -->
+    <div id="loading-state" class="loading-container hidden">
+      <div class="skeleton skeleton-hero"></div>
+      <div class="skeleton-grid">
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+      </div>
+    </div>
+
+    <!-- Recommendations Results Section -->
+    <section id="results-section" class="results-section hidden">
+      <!-- Target Selected Movie Showcase Banner -->
+      <div class="section-header">
+        <h2 class="section-title">Selected Target Movie</h2>
+      </div>
+      <div id="target-movie-container" class="target-movie-banner"></div>
+
+      <!-- Recommendations Grid -->
+      <div class="section-header results-header-margin">
+        <div>
+          <h2 class="section-title">Recommended Movies for You</h2>
+          <p class="section-subtitle">Ranked by Content Similarity Score (NLP Cosine Distance)</p>
+        </div>
+      </div>
+      <div id="recommendations-grid" class="movies-grid"></div>
+    </section>
+
+    <!-- Popular Catalog Section -->
+    <section class="catalog-section">
+      <div class="catalog-header">
+        <div>
+          <h2 class="section-title">Explore Movie Catalog</h2>
+          <p class="section-subtitle">Browse top movies across various genres</p>
+        </div>
+        <div class="catalog-controls">
+          <select id="genre-filter" class="filter-select">
+            <option value="">All Genres</option>
+          </select>
+          <select id="sort-select" class="filter-select">
+            <option value="popularity">Most Popular</option>
+            <option value="rating">Top Rated</option>
+            <option value="title">Alphabetical</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="catalog-grid" class="movies-grid"></div>
+      <div class="pagination-container">
+        <button id="prev-page" class="btn btn-secondary" disabled>Previous</button>
+        <span id="page-indicator" class="page-indicator">Page 1</span>
+        <button id="next-page" class="btn btn-secondary">Next</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Movie Details Modal Dialog -->
+  <div id="movie-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <button id="modal-close" class="modal-close-btn" aria-label="Close modal">&times;</button>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container footer-content">
+      <p>© 2026 TMDB Movie Recommendation System • Built with Python, Scikit-Learn & Modern UI</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

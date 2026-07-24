@@ -1,90 +1,155 @@
-# TMDB Movie Recommendation System
+# 🎬 CineMatch AI - TMDB Movie Recommendation System
 
-A Content-Based Movie Recommendation System built using Python, Pandas, Scikit-Learn, and NLTK. This system recommends movies similar to a user's favorite movie by analyzing movie attributes such as genres, keywords, cast, crew, and plot summaries.
+A modern, production-ready **Full-Stack Content-Based Movie Recommendation System** built with **Python, Scikit-Learn, NLTK, Flask**, and a sleek **Dark Glassmorphic Web UI**.
 
----
-
-## 🚀 How it Works
-
-The recommendation engine utilizes **Content-Based Filtering** to find similarity between movies. Here is the step-by-step pipeline implemented in this project:
-
-1. **Data Merging**: Combines TMDB 5000 Movies and Credits datasets on the movie title.
-2. **Feature Selection**: Selects critical features for recommendation:
-   - `movie_id`
-   - `title`
-   - `overview` (plot summary)
-   - `genres`
-   - `keywords`
-   - `cast` (top 3 actors)
-   - `crew` (director)
-3. **Data Preprocessing & Cleaning**:
-   - Parses stringified JSON fields into Python lists.
-   - Cleans names and tags (e.g., removing spaces: `"Science Fiction"` becomes `"ScienceFiction"`, `"Sam Worthington"` becomes `"SamWorthington"`) to prevent tag mismatching.
-   - Combines all features into a single consolidated string of `tags` for each movie.
-4. **Text Stemming**: Uses NLTK's `PorterStemmer` to reduce words to their root forms (e.g., `"loving"`, `"loved"` -> `"love"`).
-5. **Vectorization**: Transforms the text tags into numerical vectors using Scikit-Learn's `CountVectorizer` (using a Bag of Words model with the top 5000 features, ignoring common English stop words).
-6. **Cosine Similarity**: Calculates the cosine distance between movie vectors to construct a similarity matrix.
-7. **Recommendation**: Finds the top 5 most similar movies based on the similarity scores.
+This application recommends movies similar to your favorite films by analyzing plot overviews, genres, keywords, cast, and directors using **Natural Language Processing (NLP)** and **Cosine Similarity**.
 
 ---
 
-## 📂 Project Structure
+## ✨ Features
+
+- 🧠 **Machine Learning Engine**: Content-based filtering using `CountVectorizer` and NLTK `PorterStemmer` text vectorization with cosine similarity scoring.
+- 🎨 **Modern Dark Glassmorphic UI**: High-end cinema design with gradient highlights (`#6366f1` & `#ec4899`), glassmorphic cards, ambient glow orbs, and dark backdrop blur.
+- 🔍 **Real-Time Autocomplete Search**: Instant title autocompletion featuring movie poster thumbnails, release year, genres, and rating badges.
+- 🎛️ **Custom Dark Dropdown**: Custom recommendation count selector (`Top 5`, `Top 8`, `Top 12`, `Top 16`).
+- 🖼️ **Dynamic Movie Poster Art**: High-resolution movie posters across autocomplete items, target movie banners, recommendation grids, and catalog cards.
+- 🍿 **Interactive Movie Modal**: Detailed movie popup showcasing full synopsis, director, cast list, keywords, and a direct YouTube trailer button.
+- 📚 **Explore Movie Catalog**: Filterable catalog grid supporting genre filtering (`Action`, `Sci-Fi`, `Drama`, etc.), sorting (`Popularity`, `Rating`, `Title`), and pagination.
+- 🛡️ **Robust Error Handling**: Graceful fallback handling for non-existent titles, empty searches, special characters, and missing inputs.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Backend & API**: Python 3, Flask, Flask-CORS, Gunicorn
+- **Data Science & ML**: Pandas, NumPy, Scikit-Learn (`CountVectorizer`, `cosine_similarity`), NLTK (`PorterStemmer`)
+- **Frontend**: HTML5, Vanilla JavaScript (ES6+), Modern CSS3 Custom Properties & Glassmorphism
+- **Deployment Ready**: Configured for Render, Vercel, Railway, and Heroku
+
+---
+
+## 📁 Project Structure
 
 ```
-├── tmdb_5000_movies.csv       # TMDB dataset containing movie metadata
-├── tmdb_5000_credits.csv      # TMDB dataset containing cast and crew info
-├── main.ipynb                 # Jupyter Notebook containing data pipeline & model
-├── README.md                  # Project documentation
-├── .gitignore                 # Files to ignore in Git
+Movie_Recommendation_System/
+├── artifacts/                  # Generated binary model files
+│   ├── movies_dict.pkl         # Clean movie metadata list
+│   └── similarity.pkl          # Cosine similarity matrix (4806 x 4806)
+├── static/                     # Frontend static assets
+│   ├── index.html              # Modern single-page web app UI
+│   ├── styles.css              # Dark glassmorphic design system
+│   └── app.js                  # Client logic, autocomplete, and REST calls
+├── app.py                      # Flask REST API server & static server
+├── builder.py                  # Preprocessing, bug fixes, & artifact generator
+├── tmdb_5000_movies.csv        # TMDB 5000 movies dataset
+├── tmdb_5000_credits.csv       # TMDB 5000 credits (cast & crew) dataset
+├── requirements.txt            # Python dependencies
+├── Procfile                    # Web server deployment file
+├── vercel.json                 # Vercel serverless configuration
+└── README.md                   # Project documentation
 ```
 
 ---
 
-## 🛠️ Installation & Setup
+## 🚀 How to Run the Application Locally
 
-To run this project locally, you need Python and the required data science libraries.
-
-### 1. Clone the Repository
+### Step 1: Open Terminal in Project Directory
+Ensure your terminal or command prompt is located inside the `Movie_Recommendation_System` directory:
 ```bash
-git clone https://github.com/Minhaj078/Movie_Recommendation_System.git
 cd Movie_Recommendation_System
 ```
 
-### 2. Install Dependencies
-Make sure you have `pip` installed, then run:
+### Step 2: Install Required Dependencies
+Run the following command to install Flask, Scikit-Learn, Pandas, and required packages:
 ```bash
-pip install numpy pandas scikit-learn nltk
+py -3 -m pip install -r requirements.txt
 ```
+*(Or use `pip install -r requirements.txt` depending on your environment)*
 
-### 3. Run the Jupyter Notebook
-Start Jupyter Notebook or open the project in VS Code:
+### Step 3: Build & Export Data Artifacts (One-Time Setup)
+Generate the pre-computed recommendations matrix and clean metadata pickle files:
 ```bash
-jupyter notebook main.ipynb
+py -3 builder.py
 ```
-Run all cells in `main.ipynb` to preprocess the dataset, train the recommender model, and generate the similarity matrices.
-
----
-
-## 🔮 Usage
-
-Once the notebook runs successfully, you can get recommendations using the `recommend` function:
-
-```python
-recommend('Avatar')
-```
-
-**Output Example:**
+*Output expectation:*
 ```text
-Aliens
-Silent Running
-Mission to Mars
-Moon
-Alien vs. Predator
+[+] Loading TMDB 5000 datasets...
+[+] Merging datasets on title...
+[+] Cleaning & extracting features...
+[+] Stemming text tags with NLTK PorterStemmer...
+[+] Vectorizing tags with CountVectorizer...
+[+] Calculating Cosine Similarity Matrix...
+[+] Saving model artifacts...
+✅ Model build & export complete successfully!
+Total Movies: 4806
+```
+
+### Step 4: Start the Web Server
+Launch the Flask API server:
+```bash
+py -3 app.py
+```
+*Output expectation:*
+```text
+[+] Loading artifacts into memory...
+[+] Loaded 4806 movies into memory!
+🚀 Starting Movie Recommendation API Server on http://127.0.0.1:5000
+```
+
+### Step 5: Open in Your Browser
+Open your browser and navigate to:
+👉 **[http://127.0.0.1:5000](http://127.0.0.1:5000)**
+
+---
+
+## 🧪 How to Run QA & Unit Tests
+
+To verify that all API endpoints, logic fixes, security sanitization, and edge cases are passing:
+
+Run the comprehensive QA test suite:
+```bash
+py -3 -m unittest discover -s . -p "test_*.py"
+```
+
+Or run the specific edge case test script:
+```bash
+py -3 scratch/test_edge_cases.py
+```
+*Output expectation:*
+```text
+..........
+Ran 10 tests in 0.043s
+OK
 ```
 
 ---
 
-## 🎯 Future Enhancements
-- 🖥️ **Web Application**: Build an interactive web frontend using **Streamlit** or **Flask** to allow users to select movies from a dropdown.
-- 🎬 **Movie Posters**: Integrate the TMDB API to fetch and display high-quality posters for the recommended movies.
-- 🤝 **Collaborative Filtering**: Implement collaborative or hybrid filtering to improve suggestion accuracy using user rating data.
+## 📡 API Endpoints Reference
+
+| Endpoint | Method | Description | Sample Query |
+| :--- | :--- | :--- | :--- |
+| `GET /api/recommend` | `GET` | Get recommendations for a movie title | `/api/recommend?title=Avatar&top=5` |
+| `GET /api/search` | `GET` | Autocomplete title search with posters | `/api/search?q=iron&limit=6` |
+| `GET /api/movies` | `GET` | Paginated catalog with genre filtering | `/api/movies?page=1&limit=12&genre=Action` |
+| `GET /api/stats` | `GET` | Dataset metrics & available genres | `/api/stats` |
+
+---
+
+## 🌐 Production Deployment
+
+### Option 1: Deploy on Render / Railway
+1. Push your repository to GitHub.
+2. Create a **Web Service** on Render or Railway.
+3. Set the build command: `pip install -r requirements.txt && python builder.py`
+4. Set the start command: `gunicorn app:app`
+
+### Option 2: Deploy on Vercel
+1. Install Vercel CLI: `npm i -g vercel`
+2. Run `vercel` in the project root directory.
+
+---
+
+## 📜 License & Credits
+
+- Dataset sourced from **TMDB (The Movie Database)** 5000 Dataset.
+- Built with Python, Flask, Scikit-Learn, and NLTK.
