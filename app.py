@@ -2,7 +2,11 @@ import os
 import pickle
 import sys
 import re
+import json
 import urllib.parse
+import urllib.request
+import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
@@ -12,6 +16,27 @@ if sys.platform == 'win32':
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def load_dotenv():
+    # Simple manual env parser to avoid python-dotenv dependency
+    env_path = os.path.join(BASE_DIR, '.env')
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, val = line.split('=', 1)
+                    os.environ[key.strip()] = val.strip()
+
+# Load env variables at startup
+load_dotenv()
+TMDB_API_KEY = os.environ.get('TMDB_API_KEY')
+if TMDB_API_KEY:
+    print("[+] TMDB API Key resolved successfully.")
+else:
+    print("[!] No TMDB API Key found. Running with vector poster fallback mode.")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ARTIFACTS_DIR = os.path.join(BASE_DIR, 'artifacts')
@@ -41,6 +66,155 @@ def load_artifacts():
     print(f"[+] Loaded {len(movies_list)} movies into memory!")
 
 load_artifacts()
+
+# Poster and Metadata Caching System
+POSTER_CACHE_PATH = os.path.join(ARTIFACTS_DIR, 'poster_cache.json')
+poster_cache = {}
+
+def load_poster_cache():
+    global poster_cache
+    if os.path.exists(POSTER_CACHE_PATH):
+        try:
+            with open(POSTER_CACHE_PATH, 'r') as f:
+                loaded = json.load(f)
+            # Self-healing: Clean out any empty dicts from cache so they get retried
+            poster_cache = {k: v for k, v in loaded.items() if v}
+            print(f"[+] Loaded {len(poster_cache)} cached posters (cleaned {len(loaded) - len(poster_cache)} empty records) from {POSTER_CACHE_PATH}")
+        except Exception as e:
+            print(f"[!] Failed to load poster cache: {e}")
+            poster_cache = {}
+    else:
+        print("[+] Poster cache file does not exist yet. Creating a new one...")
+        poster_cache = {}
+
+def save_poster_cache():
+    try:
+        with open(POSTER_CACHE_PATH, 'w') as f:
+            json.dump(poster_cache, f)
+    except Exception as e:
+        print(f"[!] Failed to save poster cache: {e}")
+
+load_poster_cache()
+
+def fetch_tmdb_metadata(movie_id):
+    """
+    Fetches poster and metadata from TMDB using the movie's ID.
+    Returns a dict with metadata, {"not_found": True} if 404, or None if network failed.
+    """
+    if not TMDB_API_KEY:
+        return None
+        
+    url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={TMDB_API_KEY}"
+    
+    # Try up to 2 times to handle temporary network/socket drops
+    for attempt in range(2):
+        try:
+            req = urllib.request.Request(
+                url, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            )
+            with urllib.request.urlopen(req, timeout=2) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                poster_path = data.get('poster_path')
+                poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
+                
+                # Extract basic metadata
+                metadata = {
+                    'poster_url': poster_url,
+                    'vote_average': data.get('vote_average'),
+                    'release_date': data.get('release_date'),
+                    'overview': data.get('overview'),
+                    'genres': [g['name'] for g in data.get('genres', [])] if data.get('genres') else None,
+                    'runtime': data.get('runtime')
+                }
+                # Remove None values so we only override if available
+                return {k: v for k, v in metadata.items() if v is not None}
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                print(f"[!] Movie ID {movie_id} not found on TMDB (404).")
+                return {"not_found": True}
+            print(f"[!] HTTP Error {e.code} for movie_id {movie_id}")
+            return None
+        except Exception as e:
+            if attempt == 0:
+                # Wait 200ms and retry
+                import time
+                time.sleep(0.2)
+                continue
+            print(f"[!] Network error fetching TMDB metadata for movie_id {movie_id}: {e}")
+            return None
+
+def enrich_movies_with_posters(movies_to_enrich):
+    """
+    Enriches a list of movie dicts with poster URLs and TMDB metadata.
+    Uses cached values where available, and fetches missing ones in parallel.
+    """
+    global poster_cache
+    
+    missing_ids = []
+    for m in movies_to_enrich:
+        movie_id = str(m.get('movie_id'))
+        if movie_id not in poster_cache and TMDB_API_KEY:
+            missing_ids.append(m.get('movie_id'))
+            
+    if missing_ids:
+        # Fetch missing in parallel using ThreadPoolExecutor
+        print(f"[+] Fetching {len(missing_ids)} missing poster(s) in parallel from TMDB...")
+        with ThreadPoolExecutor(max_workers=min(10, len(missing_ids))) as executor:
+            results = list(executor.map(fetch_tmdb_metadata, missing_ids))
+            
+        # Update cache
+        cache_updated = False
+        for mid, meta in zip(missing_ids, results):
+            if meta is not None:
+                poster_cache[str(mid)] = meta
+                cache_updated = True
+                
+        if cache_updated:
+            save_poster_cache()
+            
+    # Apply cached/fetched metadata to the response objects
+    enriched = []
+    for m in movies_to_enrich:
+        enriched_movie = dict(m)
+        movie_id_str = str(enriched_movie.get('movie_id'))
+        
+        # Load from cache if exists
+        cached_meta = poster_cache.get(movie_id_str, {})
+        
+        # Override fields if they are available in the cache and it's not a "not_found" marker
+        if cached_meta and not cached_meta.get('not_found'):
+            if cached_meta.get('poster_url'):
+                enriched_movie['poster_url'] = cached_meta['poster_url']
+            else:
+                # If cached metadata doesn't have a poster path, fallback to SVG generator
+                enriched_movie['poster_url'] = get_poster_url(enriched_movie)
+            
+            # Enrich with other fields if they are in the cache
+            if cached_meta.get('vote_average') is not None:
+                enriched_movie['vote_average'] = cached_meta['vote_average']
+            if cached_meta.get('release_date'):
+                enriched_movie['release_date'] = cached_meta['release_date']
+            if cached_meta.get('overview'):
+                enriched_movie['overview'] = cached_meta['overview']
+            if cached_meta.get('genres'):
+                enriched_movie['genres'] = cached_meta['genres']
+            if cached_meta.get('runtime') is not None:
+                enriched_movie['runtime'] = cached_meta['runtime']
+        else:
+            # Fallback to the SVG vector poster
+            enriched_movie['poster_url'] = get_poster_url(enriched_movie)
+            
+        enriched.append(enriched_movie)
+        
+    return enriched
+
+def format_movies_batch(movies):
+    """
+    Formats a list of movies, enriching them in batch with posters and metadata.
+    """
+    raw_dicts = [dict(m) for m in movies]
+    return enrich_movies_with_posters(raw_dicts)
 
 # Genre color map for visual poster styling
 GENRE_GRADIENTS = {
@@ -151,7 +325,7 @@ def get_movies():
 
     start_idx = (page - 1) * limit
     end_idx = start_idx + limit
-    page_items = [format_movie_response(m) for m in filtered[start_idx:end_idx]]
+    page_items = format_movies_batch(filtered[start_idx:end_idx])
 
     return jsonify({
         'total': len(filtered),
@@ -181,7 +355,7 @@ def search_movies():
             matches.append((1, m))
 
     matches = sorted(matches, key=lambda x: (x[0], -x[1].get('popularity', 0)))[:limit]
-    results = [format_movie_response(m[1]) for m in matches]
+    results = format_movies_batch([m[1] for m in matches])
     return jsonify({'results': results})
 
 @app.route('/api/recommend', methods=['GET'])
@@ -213,10 +387,10 @@ def recommend():
         return jsonify({
             'error': f'Movie "{title_query}" was not found in our database.',
             'query': title_query,
-            'suggestions': [format_movie_response(m) for m in popular]
+            'suggestions': format_movies_batch(popular)
         }), 404
 
-    target_movie = format_movie_response(movies_list[target_idx])
+    target_movie = format_movies_batch([movies_list[target_idx]])[0]
     
     # Compute distances from positional index
     distances = similarity_matrix[target_idx]
@@ -224,12 +398,14 @@ def recommend():
     # Sort positional indices by similarity score in descending order (excluding self)
     similar_indices = sorted(list(enumerate(distances)), key=lambda x: x[1], reverse=True)[1:top_n + 1]
 
-    recommendations = []
-    for idx, sim_score in similar_indices:
-        m = format_movie_response(movies_list[idx])
+    # Batch format recommended movies in parallel
+    raw_recs = [movies_list[idx] for idx, _ in similar_indices]
+    recommendations = format_movies_batch(raw_recs)
+    
+    # Inject similarity scores
+    for m, (idx, sim_score) in zip(recommendations, similar_indices):
         m['similarity_score'] = round(float(sim_score), 4)
         m['match_percentage'] = int(round(float(sim_score) * 100))
-        recommendations.append(m)
 
     return jsonify({
         'target_movie': target_movie,
